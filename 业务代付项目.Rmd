@@ -1,0 +1,1038 @@
+---
+title: "业务代付项目"
+author: '""'
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output:
+  html_document:
+    toc: yes
+    df_print: paged
+  bookdown::pdf_document2:
+    toc: yes
+    number_sections: yes
+    keep_tex: yes
+    citation_package: natbib
+    fig_caption: yes
+    highlight: haddock
+    df_print: kable
+    extra_dependencies:
+      caption: labelfont={bf}
+  pdf_document:
+    toc: yes
+---
+
+
+```{r}
+library(stringr)
+library(dplyr)
+library(tibble)
+library(lattice)
+library(magrittr)
+library(miscTools)
+library(tidyverse)
+library(rlang)
+library(MASS)
+library("farver")
+library("nnet")
+library(cowplot)
+library("DescTools")
+require(foreign)
+library("brant")
+library(VGAM)
+library(table1)
+library(knitr)
+```
+
+```{r}
+theme <- theme_get()
+theme$text$family <- "苹方-简 常规体"
+theme_set(theme)
+
+knitr::opts_chunk$set(fig.width=15, fig.height=8,warning = F) 
+```
+
+```{r}
+boss <- read.csv("boss_fea_1.csv",header = T,fileEncoding = 'GBK') ## 支付人
+boss[,c(3:38)]  <- boss[,c(3:38)] %>% sapply(function(x) as.numeric(x))
+
+## count missing values
+# apply(boss, 2, function(x) sum(is.na(x)))
+## replace missing values with 0
+boss[is.na(boss)] = 0
+boss["id"] <- "支付人"
+
+t_boss <- read.csv("t_boss_fea_1.csv",header = T,fileEncoding = 'GBK') ## 被支付人
+t_boss[,c(3:38)]  <- t_boss[,c(3:38)] %>% sapply(function(x) as.numeric(x))
+## count missing values
+# apply(t_boss, 2, function(x) sum(is.na(x)))
+## replace missing values with 0
+t_boss[is.na(t_boss)] = 0
+t_boss["id"] = "被支付人"
+
+
+no <- read.csv("no_fea_1.csv",header = T,fileEncoding = 'GBK') ## 非代付人
+no[,c(3:38)]  <- no[,c(3:38)] %>% sapply(function(x) as.numeric(x))
+
+# apply(no, 2, function(x) sum(is.na(x)))
+## replace missing values with 0
+no[is.na(no)] = 0
+no["id"] = "非代付人"
+
+
+merg <- rbind(boss[,-c(1,2)],t_boss[,-c(1,2)],no[,-c(1,2)])
+
+
+boss_me <- data.frame(rate = boss[,c(3:6,15:18,27:30)] %>% apply(2, function(x) length(x[x>0])/length(x)))
+boss_me["id"] <- "支付人"
+
+t_boss_me <- data.frame(rate = t_boss[,c(3:6,15:18,27:30)] %>% apply(2, function(x) length(x[x>0])/length(x)))
+t_boss_me["id"] <- "被支付人"
+
+no_me <- data.frame(rate = no[,c(3:6,15:18,27:30)] %>% apply(2, function(x) length(x[x>0])/length(x)))
+no_me["id"] <- "非代付人"
+
+
+
+all_me <- rbind(boss_me,t_boss_me,no_me)
+
+all_me <- all_me %>% mutate(
+  fea = row.names(all_me),
+  ord = rep(c(30,90,180,365),9)
+)
+
+a <- rep("报销",4)
+b <- rep("消费",4)
+c <- rep("冲直豆",4)
+d <- c(a,b,c)
+
+
+row.names(all_me) <- seq(1,36)
+all_me["属性"] <- rep(d,3)
+
+all_me$id <- as.factor(all_me$id)
+all_me$属性 <- as.factor(all_me$属性)
+```
+
+```{r}
+boss <- read.csv("boss_fea_1.csv",header = T,fileEncoding = 'GBK') ## 支付人
+boss[,c(3:38)]  <- boss[,c(3:38)] %>% sapply(function(x) as.numeric(x))
+
+## count missing values
+#apply(boss, 2, function(x) sum(is.na(x)))
+## replace missing values with 0
+boss[is.na(boss)] = 0
+
+boss_cat <- boss[,c(39,40,41)]
+boss_cat["Boss 类别"] = "支付人"
+
+boss_mean <- data.frame(mean = colMeans(boss[,c(3:6,15:18,27:30)]))
+boss_avg_mean <- data.frame(avg_mean = colMeans(boss[,c(3:6,15:18,27:30) + 8])) 
+boss_mean["id"] <- "支付人"
+boss_avg_mean["id"] <- "支付人"
+
+#-------------------------------------------------------
+t_boss <- read.csv("t_boss_fea_1.csv",header = T,fileEncoding = 'GBK') ## 被支付人
+t_boss[,c(3:38)]  <- t_boss[,c(3:38)] %>% sapply(function(x) as.numeric(x))
+## count missing values
+#apply(t_boss, 2, function(x) sum(is.na(x)))
+## replace missing values with 0
+t_boss[is.na(t_boss)] = 0
+
+t_boss_cat <- t_boss[,c(39,40,41)]
+t_boss_cat["Boss 类别"] = "被支付人"
+
+
+t_boss_mean <- data.frame(mean = colMeans(t_boss[,c(3:6,15:18,27:30)]))
+t_boss_avg_mean <- data.frame(avg_mean = colMeans(t_boss[,c(3:6,15:18,27:30) + 8])) 
+t_boss_mean["id"] <- "被支付人"
+t_boss_avg_mean["id"] <- "被支付人"
+
+#-------------------------------------------------------
+no <- read.csv("no_fea_1.csv",header = T,fileEncoding = 'GBK') ## 支付人
+no[,c(3:38)]  <- no[,c(3:38)] %>% sapply(function(x) as.numeric(x))
+
+## count missing values
+#apply(no, 2, function(x) sum(is.na(x)))
+## replace missing values with 0
+no[is.na(no)] = 0
+
+no_cat <- no[,c(39,40,41)]
+no_cat["Boss 类别"] = "非代付人"
+
+
+no_mean <- data.frame(mean = colMeans(no[,c(3:6,15:18,27:30)]))
+no_avg_mean <- data.frame(avg_mean = colMeans(no[,c(3:6,15:18,27:30) + 8])) 
+
+no_mean["id"] <- "非代付人"
+no_avg_mean["id"] <- "非代付人"
+
+bo_cat <- rbind(boss_cat,t_boss_cat,no_cat) ## categorical variables
+
+bo_mean <- rbind(boss_mean,t_boss_mean,no_mean) ## 支付人平均值 
+
+bo_avg_mean <- rbind(boss_avg_mean,t_boss_avg_mean,no_avg_mean) ## 支付人每次平均值 
+
+bo_mean <- bo_mean %>% mutate(
+  fea = row.names(bo_mean),
+  ord = rep(c(30,90,180,365),9)
+)
+
+
+row.names(bo_mean) <- seq(1,36)
+bo_mean["属性"] <- rep(d,3)
+
+bo_mean$id <- as.factor(bo_mean$id)
+bo_mean$属性 <- as.factor(bo_mean$属性)
+
+
+bo_avg_mean <- bo_avg_mean %>% mutate(
+  fea = row.names(bo_avg_mean),
+  ord = rep(c(30,90,180,365),9)
+)
+
+
+
+row.names(bo_avg_mean) <- seq(1,36)
+bo_avg_mean["属性"] <- rep(d,3)
+
+bo_avg_mean$id <- as.factor(bo_avg_mean$id)
+bo_avg_mean$属性 <- as.factor(bo_avg_mean$属性)
+bo_cat$boss_identity <- as.factor(bo_cat$boss_identity)
+bo_cat$brand_scale <- as.factor(bo_cat$brand_scale)
+bo_cat$brand_industry <- as.factor(bo_cat$brand_industry)
+bo_cat$`Boss 类别` <- as.factor(bo_cat$`Boss 类别`)
+```
+
+# 可视化
+## Boss比较
+### 购买前一段时间报销，充值豆，消费比例
+```{r}
+p1 <- all_me %>% ggplot(mapping = aes(x = ord, y = rate)) +
+  geom_point(aes(color = 属性)) +
+  geom_line(aes(color = 属性,linetype = id)) +
+  geom_segment(
+    y = 0,
+    yend = 0.8,
+    x = -Inf,
+    xend = -Inf,
+    lwd = 0.5,
+    colour = "grey30",
+    lineend = "square"
+  ) +
+  geom_segment(
+    y = -Inf,
+    yend = -Inf,
+    x = 30,
+    xend = 365,
+    lwd = 0.5,
+    colour = "grey30",
+    lineend = "square"
+  ) +
+  labs(x = "\n距离购买时间 ", y = "比例\n") +
+  scale_linetype_manual(values = c("solid","longdash","dotdash"))+
+  scale_x_continuous(limits = c(30, 365),
+                     breaks = c(30,90,180,365))+ 
+  scale_y_continuous(limits = c(0, 0.8),
+                     breaks = seq(0, 0.8, 0.1))+theme(
+                       panel.grid.major = element_blank(),
+                       panel.grid.minor = element_blank(),
+                       panel.background = element_blank(),
+                       axis.line = element_blank(),
+                       legend.position = "bottom",
+                       axis.ticks.length = unit(.18, "cm"),
+                       axis.text = element_text(size = 18, face = "plain"),
+                       axis.title = element_text(size = 25, face = "plain"),
+                       legend.title = element_text(size = 15),
+                       legend.text = element_text(size = 15),
+                       legend.box = "horizontal",
+                       text = element_text(family='苹方-简 常规体')
+                     )
+
+p1
+```
+
+
+### 购买前一段时间报销，充值豆，消费平均值
+```{r}
+p2 <- bo_mean %>% ggplot(mapping = aes(x = ord, y = mean)) +
+  geom_point(aes(color = 属性)) +
+  geom_line(aes(color = 属性,linetype = id)) +
+  geom_segment(
+    y = 0,
+    yend = 2400,
+    x = -Inf,
+    xend = -Inf,
+    lwd = 0.5,
+    colour = "grey30",
+    lineend = "square"
+  ) +
+  geom_segment(
+    y = -Inf,
+    yend = -Inf,
+    x = 30,
+    xend = 365,
+    lwd = 0.5,
+    colour = "grey30",
+    lineend = "square"
+  ) +
+  labs(x = "\n距离购买时间 ", y = "平均值(元)\n")+
+  scale_linetype_manual(values = c("solid","longdash","dotdash"))+
+  scale_x_continuous(limits = c(30, 365),
+                     breaks = c(30,90,180,365))+ 
+  scale_y_continuous(limits = c(0, 2300),
+                     breaks = seq(0, 2400, 200))+theme(
+                       panel.grid.major = element_blank(),
+                       panel.grid.minor = element_blank(),
+                       panel.background = element_blank(),
+                       axis.line = element_blank(),
+                       legend.position = "bottom",
+                       axis.ticks.length = unit(.18, "cm"),
+                       axis.text = element_text(size = 18, face = "plain"),
+                       axis.title = element_text(size = 25, face = "plain"),
+                       legend.title = element_text(size = 15),
+                       legend.text = element_text(size = 15),
+                       legend.box = "horizontal",
+                       text = element_text(family='苹方-简 常规体')
+                     )
+
+
+p2
+```
+
+### 购买前一段时间报销，充值豆，消费每次平均值
+```{r}
+p3 <- bo_avg_mean %>% ggplot(mapping = aes(x = ord, y = avg_mean)) +
+  geom_point(aes(color = 属性)) +
+  geom_line(aes(color = 属性,linetype = id)) +
+  geom_segment(
+    y = 0,
+    yend = 240,
+    x = -Inf,
+    xend = -Inf,
+    lwd = 0.5,
+    colour = "grey30",
+    lineend = "square"
+  ) +
+  geom_segment(
+    y = -Inf,
+    yend = -Inf,
+    x = 30,
+    xend = 365,
+    lwd = 0.5,
+    colour = "grey30",
+    lineend = "square"
+  ) +
+  labs(x = "\n距离购买时间 ", y = "每次平均值(元)\n") +
+  scale_linetype_manual(values = c("solid","longdash","dotdash"))+
+  scale_x_continuous(limits = c(30, 365),
+                     breaks = c(30,90,180,365))+ 
+  scale_y_continuous(limits = c(0, 240),
+                     breaks = seq(0, 240, 20))+theme(
+                       panel.grid.major = element_blank(),
+                       panel.grid.minor = element_blank(),
+                       panel.background = element_blank(),
+                       axis.line = element_blank(),
+                       legend.position = "bottom",
+                       axis.ticks.length = unit(.18, "cm"),
+                       axis.text = element_text(size = 18, face = "plain"),
+                       axis.title = element_text(size = 25, face = "plain"),
+                       legend.title = element_text(size = 15),
+                       legend.text = element_text(size = 15),
+                       legend.box = "horizontal",
+                       text = element_text(family='苹方-简 常规体')
+                     )
+
+p3
+```
+
+
+## Boss类别的职级比例
+```{r}
+da_1 <-
+  bo_cat %>% count(boss_identity,`Boss 类别`) %>% 
+  group_by(`Boss 类别`) %>% mutate(freq = n /sum(n)) %>% 
+  mutate(y_label = paste0(round(freq * 100, 2), "%"))
+
+da_1 %>% ggplot(aes(x = boss_identity, y = freq, fill = `Boss 类别`)) +
+        geom_bar(stat = "identity", position = "dodge", color = "grey40") +
+        scale_fill_manual(values = c("blue", "red","yellow")) +
+        geom_text(aes(label = y_label), position = position_dodge(0.9),
+                 vjust = -0.5, color = "black", family = "Georgia",size = 4.38)+
+  geom_segment(
+    y = 0,
+    yend = 0.75,
+    x = -Inf,
+    xend = -Inf,
+    lwd = 0.5,
+    colour = "grey30",
+    lineend = "square"
+  ) +
+  geom_segment(
+    y = -Inf,
+    yend = -Inf,
+    x = 1,
+    xend = 3,
+    lwd = 0.5,
+    colour = "grey30",
+    lineend = "square"
+  ) +
+  labs(x = "\nBoss职级 ", y = "比率\n") +
+  scale_y_continuous(limits = c(0, 0.75),
+                     breaks = seq(0, 0.75, 0.05))+theme(
+                       panel.grid.major = element_blank(),
+                       panel.grid.minor = element_blank(),
+                       panel.background = element_blank(),
+                       axis.line = element_blank(),
+                       axis.ticks.length = unit(.18, "cm"),
+                       axis.text = element_text(size = 18, face = "plain"),
+                       axis.title = element_text(size = 35, face = "plain"),
+                       legend.title = element_text(size = 15),
+                       legend.text = element_text(size = 15),
+                       legend.position = c(0.1, 0.858),
+                       legend.key.size = unit(1.5, "cm"),
+                       text = element_text(family='苹方-简 常规体')
+                     )
+
+```
+
+
+```{r}
+da_2 <-
+  bo_cat %>% count(brand_scale, `Boss 类别`) %>% 
+  group_by(`Boss 类别`) %>% mutate(freq = n /sum(n)) %>% 
+  mutate(y_label = paste0(round(freq * 100, 2), "%"))
+
+
+da_2$brand_scale <- da_2$brand_scale %>% as.factor() %>% factor(levels = c("0-20人","20-99人","100-499人","500-999人","1000-9999人","10000人以上"))
+
+
+
+da_2 %>% ggplot(aes(x = brand_scale, y = freq, fill = `Boss 类别`)) +
+        geom_bar(stat = "identity", position = "dodge", color = "grey40") +
+        scale_fill_manual(values = c("blue", "red","yellow")) +
+        geom_text(aes(label = y_label), position = position_dodge(0.9),
+                 vjust = -0.5, color = "black", family = "Georgia",size = 4.38)+
+  geom_segment(
+    y = 0,
+    yend = 0.45,
+    x = -Inf,
+    xend = -Inf,
+    lwd = 0.5,
+    colour = "grey30",
+    lineend = "square"
+  ) +
+  geom_segment(
+    y = -Inf,
+    yend = -Inf,
+    x = 1,
+    xend = 7,
+    lwd = 0.5,
+    colour = "grey30",
+    lineend = "square"
+  ) +
+  labs(x = "\n公司规模 ", y = "比率\n") +
+  scale_y_continuous(limits = c(0, 0.45),
+                     breaks = seq(0, 0.45, 0.05))+theme(
+                       panel.grid.major = element_blank(),
+                       panel.grid.minor = element_blank(),
+                       panel.background = element_blank(),
+                       axis.line = element_blank(),
+                       axis.ticks.length = unit(.18, "cm"),
+                       axis.text = element_text(size = 18, face = "plain"),
+                       axis.title = element_text(size = 35, face = "plain"),
+                       legend.title = element_text(size = 15),
+                       legend.text = element_text(size = 15),
+                       legend.position = c(0.9, 0.858),
+                       legend.key.size = unit(1.5, "cm"),
+                       text = element_text(family='苹方-简 常规体')
+                     )
+
+```
+
+
+```{r}
+job_info <- read.csv("job_info_1.csv",header = T,fileEncoding = 'GBK',stringsAsFactors = TRUE) ## 代付订单
+job_info <- job_info[job_info$industry != "NULL",] %>% unique()
+job_info$salary <- as.character(job_info$salary)
+job_info$salary <- as.numeric(job_info$salary)
+
+job_info_normal <- read.csv("job_info_no_1.csv",header = T,fileEncoding = 'GBK',stringsAsFactors = TRUE) ## 非代付订单
+
+
+job_info["是否代付"] <- "是"
+job_info_normal["是否代付"] <- "否"
+
+job_info_all <- rbind(job_info[,seq(2,9)],job_info_normal[,seq(4,11)])
+
+job_info_all$是否代付 <- as.factor(job_info_all$是否代付)
+```
+
+## 订单比较
+### 学历
+```{r}
+dat <-
+  job_info_all %>% count(degree, 是否代付) %>% 
+  group_by(是否代付) %>% mutate(freq = n /sum(n)) %>% 
+  mutate(y_label = paste0(round(freq * 100, 2), "%"))
+
+
+dat$degree <- dat$degree %>% as.factor() %>% factor(levels = c("初中及以下","中专/中技","高中","大专","本科","硕士","不限"))
+
+dat %>% ggplot(aes(x = degree, y = freq, fill = 是否代付)) +
+        geom_bar(stat = "identity", position = "dodge", color = "grey40") +
+        scale_fill_manual(values = c("#a1d99b", "#31a354")) +
+        geom_text(aes(label = y_label), position = position_dodge(0.9),
+                 vjust = -0.5, color = "black", family = "Georgia",size = 4.38)+
+  geom_segment(
+    y = 0,
+    yend = 0.45,
+    x = -Inf,
+    xend = -Inf,
+    lwd = 0.5,
+    colour = "grey30",
+    lineend = "square"
+  ) +
+  geom_segment(
+    y = -Inf,
+    yend = -Inf,
+    x = 1,
+    xend = 7,
+    lwd = 0.5,
+    colour = "grey30",
+    lineend = "square"
+  ) +
+  labs(x = "\n学历 ", y = "比率\n") +
+  scale_y_continuous(limits = c(0, 0.45),
+                     breaks = seq(0, 0.45, 0.05))+theme(
+                       panel.grid.major = element_blank(),
+                       panel.grid.minor = element_blank(),
+                       panel.background = element_blank(),
+                       axis.line = element_blank(),
+                       axis.ticks.length = unit(.18, "cm"),
+                       axis.text = element_text(size = 18, face = "plain"),
+                       axis.title = element_text(size = 35, face = "plain"),
+                       legend.title = element_text(size = 15),
+                       legend.text = element_text(size = 15),
+                       legend.position = c(0.05, 0.858),
+                       legend.key.size = unit(1.5, "cm"),
+                       text = element_text(family='苹方-简 常规体')
+                     )
+
+```
+
+### 学历
+```{r}
+dat <-
+  job_info_all %>% count(degree, 是否代付) %>% 
+  group_by(是否代付) %>% mutate(freq = n /sum(n)) %>% 
+  mutate(y_label = paste0(round(freq * 100, 2), "%"))
+
+
+dat$degree <- dat$degree %>% as.factor() %>% factor(levels = c("初中及以下","中专/中技","高中","大专","本科","硕士","不限"))
+
+dat %>% ggplot(aes(x = degree, y = freq, fill = 是否代付)) +
+        geom_bar(stat = "identity", position = "dodge", color = "grey40") +
+        scale_fill_manual(values = c("#a1d99b", "#31a354")) +
+        geom_text(aes(label = y_label), position = position_dodge(0.9),
+                 vjust = -0.5, color = "black", family = "Georgia",size = 4.38)+
+  geom_segment(
+    y = 0,
+    yend = 0.45,
+    x = -Inf,
+    xend = -Inf,
+    lwd = 0.5,
+    colour = "grey30",
+    lineend = "square"
+  ) +
+  geom_segment(
+    y = -Inf,
+    yend = -Inf,
+    x = 1,
+    xend = 7,
+    lwd = 0.5,
+    colour = "grey30",
+    lineend = "square"
+  ) +
+  labs(x = "\n学历 ", y = "比率\n") +
+  scale_y_continuous(limits = c(0, 0.45),
+                     breaks = seq(0, 0.45, 0.05))+theme(
+                       panel.grid.major = element_blank(),
+                       panel.grid.minor = element_blank(),
+                       panel.background = element_blank(),
+                       axis.line = element_blank(),
+                       axis.ticks.length = unit(.18, "cm"),
+                       axis.text = element_text(size = 18, face = "plain"),
+                       axis.title = element_text(size = 35, face = "plain"),
+                       legend.title = element_text(size = 15),
+                       legend.text = element_text(size = 15),
+                       legend.position = c(0.05, 0.858),
+                       legend.key.size = unit(1.5, "cm"),
+                       text = element_text(family='苹方-简 常规体')
+                     )
+```
+
+
+### 工作经历
+```{r}
+dat_1 <-
+  job_info_all %>% count(experience, 是否代付) %>% 
+  group_by(是否代付) %>% mutate(freq = n /sum(n)) %>% 
+  mutate(y_label = paste0(round(freq * 100, 2), "%"))
+
+
+dat_1$experience <- dat_1$experience %>% as.factor() %>% factor(levels = c("在校/应届","1年以内","1-3年","3-5年","5-10年","10年以上","不限"))
+
+p4 <- dat_1 %>% ggplot(aes(x = experience, y = freq, fill = 是否代付)) +
+        geom_bar(stat = "identity", position = "dodge", color = "grey40") +
+        scale_fill_manual(values = c("#a1d99b", "#31a354")) +
+        geom_text(aes(label = y_label), position = position_dodge(0.9),
+                 vjust = -0.5, color = "black", family = "Georgia",size = 6)+
+  geom_segment(
+    y = 0,
+    yend = 0.55,
+    x = -Inf,
+    xend = -Inf,
+    lwd = 0.5,
+    colour = "grey30",
+    lineend = "square"
+  ) +
+  geom_segment(
+    y = -Inf,
+    yend = -Inf,
+    x = 1,
+    xend = 7,
+    lwd = 0.5,
+    colour = "grey30",
+    lineend = "square"
+  ) +
+  labs(x = "\n工作经历 ", y = "比率\n") +
+  scale_y_continuous(limits = c(0, 0.55),
+                     breaks = seq(0, 0.55, 0.05))+theme(
+                       panel.grid.major = element_blank(),
+                       panel.grid.minor = element_blank(),
+                       panel.background = element_blank(),
+                       axis.line = element_blank(),
+                       axis.ticks.length = unit(.18, "cm"),
+                       axis.text = element_text(size = 30, face = "plain"),
+                       axis.title = element_text(size = 35, face = "plain"),
+                       legend.title = element_text(size = 15),
+                       legend.text = element_text(size = 15),
+                       legend.position = c(0.05, 0.858),
+                       legend.key.size = unit(1.5, "cm"),
+                       text = element_text(family='苹方-简 常规体')
+                     )
+
+p4
+```
+
+
+### 行业
+```{r}
+dat_2 <-
+  job_info_all %>% count(industry, 是否代付) %>% 
+  group_by(是否代付) %>% mutate(freq = n /sum(n)) %>% 
+  mutate(y_label = paste0(round(freq * 100, 2), "%"))
+
+dat_2 <- dat_2[dat_2$industry %in% c("服务业","供应链","技术","教育培训","人事/财务/行政","生产制造","销售","运营"),]
+
+
+p5 <- dat_2 %>% ggplot(aes(x = industry, y = freq, fill = 是否代付)) +
+        geom_bar(stat = "identity", position = "dodge", color = "grey40") +
+        scale_fill_manual(values = c("#a1d99b", "#31a354")) +
+        geom_text(aes(label = y_label), position = position_dodge(0.9),
+                 vjust = -0.5, color = "black", family = "Georgia",size = 4.5)+
+  geom_segment(
+    y = 0,
+    yend = 0.3,
+    x = -Inf,
+    xend = -Inf,
+    lwd = 0.5,
+    colour = "grey30",
+    lineend = "square"
+  ) +
+  geom_segment(
+    y = -Inf,
+    yend = -Inf,
+    x = 1,
+    xend = 7,
+    lwd = 0.5,
+    colour = "grey30",
+    lineend = "square"
+  ) +
+  labs(x = "\n行业 ", y = "比率\n") +
+  scale_y_continuous(limits = c(0, 0.3),
+                     breaks = seq(0, 0.3, 0.05))+theme(
+                       panel.grid.major = element_blank(),
+                       panel.grid.minor = element_blank(),
+                       panel.background = element_blank(),
+                       axis.line = element_blank(),
+                       axis.ticks.length = unit(.18, "cm"),
+                       axis.text = element_text(size = 16, face = "plain"),
+                       axis.title = element_text(size = 30, face = "plain"),
+                       legend.title = element_text(size = 15),
+                       legend.text = element_text(size = 15),
+                       legend.position = c(0.89, 0.858),
+                       legend.key.size = unit(1.5, "cm"),
+                       text = element_text(family='苹方-简 常规体')
+                     )
+
+p5
+```
+
+
+### 蓝/白领
+```{r}
+dat_3 <-
+  job_info_all %>% count(career_type, 是否代付) %>% 
+  group_by(是否代付) %>% mutate(freq = n /sum(n)) %>% 
+  mutate(y_label = paste0(round(freq * 100, 2), "%"))
+
+
+p6 <- dat_3 %>% ggplot(aes(x = career_type, y = freq, fill = 是否代付)) +
+        geom_bar(stat = "identity", position = "dodge", color = "grey40") +
+        scale_fill_manual(values = c("#a1d99b", "#31a354")) +
+        geom_text(aes(label = y_label), position = position_dodge(0.9),
+                 vjust = -0.5, color = "black", family = "Georgia",size = 4.5)+
+  geom_segment(
+    y = 0,
+    yend = 0.75,
+    x = -Inf,
+    xend = -Inf,
+    lwd = 0.5,
+    colour = "grey30",
+    lineend = "square"
+  ) +
+  geom_segment(
+    y = -Inf,
+    yend = -Inf,
+    x = 1,
+    xend = 2,
+    lwd = 0.5,
+    colour = "grey30",
+    lineend = "square"
+  ) +
+  labs(x = "\n行业 ", y = "比率\n") +
+  scale_y_continuous(limits = c(0, 0.75),
+                     breaks = seq(0, 0.75, 0.05))+theme(
+                       panel.grid.major = element_blank(),
+                       panel.grid.minor = element_blank(),
+                       panel.background = element_blank(),
+                       axis.line = element_blank(),
+                       axis.ticks.length = unit(.18, "cm"),
+                       axis.text = element_text(size = 16, face = "plain"),
+                       axis.title = element_text(size = 30, face = "plain"),
+                       legend.title = element_text(size = 15),
+                       legend.text = element_text(size = 15),
+                       legend.position = c(0.89, 0.858),
+                       legend.key.size = unit(1.5, "cm"),
+                       text = element_text(family='苹方-简 常规体')
+                     )
+
+p6
+```
+
+### 薪资
+```{r}
+p6 <- job_info_all %>% ggplot(aes(x = 是否代付, y = salary,fill = 是否代付)) + 
+  geom_boxplot(outlier.shape=NA) +
+  geom_segment(
+    y = 0,
+    yend = 15000,
+    x = -Inf,
+    xend = -Inf,
+    lwd = 0.5,
+    colour = "grey30",
+    lineend = "square"
+  ) +
+  geom_segment(
+    y = -Inf,
+    yend = -Inf,
+    x = 1,
+    xend = 2,
+    lwd = 0.5,
+    colour = "grey30",
+    lineend = "square"
+  ) +
+  labs(x = "\n 是否代付", y = "工资(月)\n")+
+  scale_x_discrete(labels = c("非代付","代付"))+ 
+  scale_y_continuous(limits = c(0, 15000),
+                     breaks = seq(0, 15000, 1000)) + theme(
+                       panel.grid.major = element_blank(),
+                       panel.grid.minor = element_blank(),
+                       panel.background = element_blank(),
+                       axis.line = element_blank(),
+                       legend.position = c(0.1, 0.858),
+                       axis.ticks.length = unit(.18, "cm"),
+                       axis.text.x = element_text(size = 12, face = "plain"),
+                       axis.text.y = element_text(size = 12, face = "plain"),
+                       axis.title = element_text(size = 18, face = "plain"),
+                       legend.title = element_text(size=15),
+                       legend.text = element_text(size=15),
+                       legend.key.size = unit(1.5, "cm"),
+                       text = element_text(family='苹方-简 常规体')
+                       )
+
+p6
+```
+
+### 城市
+```{r}
+dat_3 <-
+  job_info_all %>% count(city, 是否代付) %>% 
+  group_by(是否代付) %>% mutate(freq = n /sum(n)) %>% 
+  mutate(y_label = paste0(round(freq * 100, 2), "%"))
+
+dat_3 <- dat_3[dat_3$city %in% c("北京","上海","广州","深圳","天津","苏州"),]
+
+
+dat_3$city <- dat_3$city %>% as.factor() %>% factor(levels = c("北京","上海","广州","深圳","天津","苏州"))
+
+
+p7 <- dat_3 %>% ggplot(aes(x = city, y = freq, fill = 是否代付)) +
+        geom_bar(stat = "identity", position = "dodge", color = "grey40") +
+        scale_fill_manual(values = c("#a1d99b", "#31a354")) +
+        geom_text(aes(label = y_label), position = position_dodge(0.9),
+                 vjust = -0.5, color = "black", family = "Georgia",size = 4.5)+
+  geom_segment(
+    y = 0,
+    yend = 0.16,
+    x = -Inf,
+    xend = -Inf,
+    lwd = 0.5,
+    colour = "grey30",
+    lineend = "square"
+  ) +
+  geom_segment(
+    y = -Inf,
+    yend = -Inf,
+    x = 1,
+    xend = 6,
+    lwd = 0.5,
+    colour = "grey30",
+    lineend = "square"
+  ) +
+  labs(x = "\n城市 ", y = "比率\n") +
+  scale_y_continuous(limits = c(0, 0.16),
+                     breaks = seq(0, 0.16, 0.01))+theme(
+                       panel.grid.major = element_blank(),
+                       panel.grid.minor = element_blank(),
+                       panel.background = element_blank(),
+                       axis.line = element_blank(),
+                       axis.ticks.length = unit(.18, "cm"),
+                       axis.text = element_text(size = 18, face = "plain"),
+                       axis.title = element_text(size = 30, face = "plain"),
+                       legend.title = element_text(size = 15),
+                       legend.text = element_text(size = 15),
+                       legend.position = c(0.05, 0.858),
+                       legend.key.size = unit(1.5, "cm"),
+                       text = element_text(family='苹方-简 常规体')
+                     )
+
+p7
+```
+
+
+```{r}
+boss_view <- read.csv("boss_view.csv",header = T,fileEncoding = 'GBK')
+t_boss_view <- read.csv("t_boss_view.csv",header = T,fileEncoding = 'GBK')
+no_view <- read.csv("no_view.csv",header = T,fileEncoding = 'GBK')
+
+boss_view["boss_type"] <- "支付人"
+t_boss_view["boss_type"] <- "被支付人"
+no_view["boss_type"] <- "非代支付"
+colnames(t_boss_view) <- colnames(boss_view)
+
+
+all_view <- rbind(boss_view,t_boss_view,no_view)
+```
+
+
+## 查看
+### 过去14天总和
+```{r}
+p11 <- all_view %>% ggplot(aes(x = boss_type, y = view_a_14_uv, fill=boss_type)) + 
+  geom_boxplot(outlier.shape=NA) +
+  geom_segment(
+    y = 0,
+    yend = 800,
+    x = -Inf,
+    xend = -Inf,
+    lwd = 0.5,
+    colour = "grey30",
+    lineend = "square"
+  ) +
+  geom_segment(
+    y = -Inf,
+    yend = -Inf,
+    x = 1,
+    xend = 3,
+    lwd = 0.5,
+    colour = "grey30",
+    lineend = "square"
+  ) +
+  labs(x = "\n Boss类别", y = "过去14天主动查看\n") +
+  #scale_fill_discrete(name = "支付", labels = c("被支付人","支付人"))+
+  #scale_x_discrete(labels = c("被支付人","支付人"))+ 
+  scale_y_continuous(limits = c(0, 800),
+                     breaks = seq(0, 800, 100)) + theme(
+                       panel.grid.major = element_blank(),
+                       panel.grid.minor = element_blank(),
+                       panel.background = element_blank(),
+                       axis.line = element_blank(),
+                       legend.position = "none",
+                       axis.ticks.length = unit(.18, "cm"),
+                       axis.text.x = element_text(size = 12, face = "plain"),
+                       axis.text.y = element_text(size = 12, face = "plain"),
+                       axis.title = element_text(size = 18, face = "plain"),
+                       legend.title = element_text(size=15),
+                       legend.text = element_text(size=15),
+                       text = element_text(family='苹方-简 常规体')
+                       )
+                       
+
+p11
+```
+
+
+### 过去30天查看总和
+```{r}
+all_view$boss_type <- as.factor(all_view$boss_type)
+
+p12 <- all_view %>% ggplot(aes(x = boss_type, y = view_a_30_uv, fill=boss_type)) + 
+  geom_boxplot(outlier.shape=NA) +
+  geom_segment(
+    y = 0,
+    yend = 1200,
+    x = -Inf,
+    xend = -Inf,
+    lwd = 0.5,
+    colour = "grey30",
+    lineend = "square"
+  ) +
+  geom_segment(
+    y = -Inf,
+    yend = -Inf,
+    x = 1,
+    xend = 3,
+    lwd = 0.5,
+    colour = "grey30",
+    lineend = "square"
+  ) +
+  labs(x = "\n Boss类别", y = "过去30天主动查看\n") +
+  #scale_fill_discrete(name = "支付", labels = c("被支付人","支付人"))+
+  #scale_x_discrete(labels = c("被支付人","支付人"))+ 
+  scale_y_continuous(limits = c(0, 1200),
+                     breaks = seq(0, 1200, 200)) + theme(
+                       panel.grid.major = element_blank(),
+                       panel.grid.minor = element_blank(),
+                       panel.background = element_blank(),
+                       axis.line = element_blank(),
+                       legend.position = "none",
+                       axis.ticks.length = unit(.18, "cm"),
+                       axis.text.x = element_text(size = 12, face = "plain"),
+                       axis.text.y = element_text(size = 12, face = "plain"),
+                       axis.title = element_text(size = 18, face = "plain"),
+                       legend.title = element_text(size=15),
+                       legend.text = element_text(size=15),
+                       text = element_text(family='苹方-简 常规体')
+                       )
+                       
+
+p12
+```
+
+
+### Boss职级
+```{r}
+all_view$boss_identity <- factor(all_view$boss_identity,levels = c("HR","m_boss","h_boss"))   
+
+
+p12 <- all_view %>% ggplot(aes(x = boss_identity, y = view_a_30_uv, fill=boss_type)) + 
+  geom_boxplot(outlier.shape=NA) +
+  geom_segment(
+    y = 0,
+    yend = 1500,
+    x = -Inf,
+    xend = -Inf,
+    lwd = 0.5,
+    colour = "grey30",
+    lineend = "square"
+  ) +
+  geom_segment(
+    y = -Inf,
+    yend = -Inf,
+    x = 1,
+    xend = 3,
+    lwd = 0.5,
+    colour = "grey30",
+    lineend = "square"
+  ) +
+  labs(x = "\n boss职级", y = "过去30天主动查看\n") +
+  scale_fill_discrete(name = "Boss 类别", labels = c("被支付人","非代付人","支付人"))+
+  scale_y_continuous(limits = c(0, 1500),
+                     breaks = seq(0, 1500, 300)) + theme(
+                       panel.grid.major = element_blank(),
+                       panel.grid.minor = element_blank(),
+                       panel.background = element_blank(),
+                       axis.line = element_blank(),
+                       legend.position = c(0.1, 0.858),
+                       axis.ticks.length = unit(.18, "cm"),
+                       axis.text.x = element_text(size = 12, face = "plain"),
+                       axis.text.y = element_text(size = 12, face = "plain"),
+                       axis.title = element_text(size = 18, face = "plain"),
+                       legend.title = element_text(size=15),
+                       legend.text = element_text(size=15),
+                       text = element_text(family='苹方-简 常规体')
+                       )
+              
+p12
+
+```
+
+### 公司规模
+```{r}
+all_view$brand_scale <- factor(all_view$brand_scale,levels = c("0-20人","20-99人","100-499人","500-999人","1000-9999人","10000人以上"))  
+
+p13 <- all_view %>% ggplot(aes(x = brand_scale, y = view_a_30_uv, fill=boss_type)) + 
+  geom_boxplot(outlier.shape=NA) +
+  geom_segment(
+    y = 0,
+    yend = 1000,
+    x = -Inf,
+    xend = -Inf,
+    lwd = 0.5,
+    colour = "grey30",
+    lineend = "square"
+  ) +
+  geom_segment(
+    y = -Inf,
+    yend = -Inf,
+    x = 1,
+    xend = 6,
+    lwd = 0.5,
+    colour = "grey30",
+    lineend = "square"
+  ) +
+  labs(x = "\n 公司规模", y = "过去30天主动查看\n") +
+  scale_fill_discrete(name = "Boss 类别", labels =  c("被支付人","非代付人","支付人"))+
+  scale_y_continuous(limits = c(0, 1000),
+                     breaks = seq(0, 1000, 200)) + theme(
+                       panel.grid.major = element_blank(),
+                       panel.grid.minor = element_blank(),
+                       panel.background = element_blank(),
+                       axis.line = element_blank(),
+                       legend.position = c(0.1, 0.858),
+                       axis.ticks.length = unit(.18, "cm"),
+                       axis.text.x = element_text(size = 12, face = "plain"),
+                       axis.text.y = element_text(size = 12, face = "plain"),
+                       axis.title = element_text(size = 18, face = "plain"),
+                       legend.title = element_text(size=15),
+                       legend.text = element_text(size=15),
+                       text = element_text(family='苹方-简 常规体')
+                       )
+        
+
+p13
+```
+
+
+
